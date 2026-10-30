@@ -1,0 +1,72 @@
+﻿using System.Text.Json;
+using Telegram.Bot;
+using Telegram.Bot.Polling;
+using Telegram.Bot.Types.Enums;
+
+namespace InlineTelegramBot;
+
+internal class Program
+{
+    private static readonly string _apiTgKey = "9187670724:AAHuQiM5hLYon_Gg1fcaCMI9yF3DOwsTRrE";
+    private static readonly string _apiDeepSeekKey = "sk-0199ffeb887c4b729d38e38b7c7d6c0d";
+    private static readonly List<UpdateType> _updateTypes = new List<UpdateType>()
+    {
+        
+    };
+
+    private async static Task Main(string[] args)
+    {
+        var cts = new CancellationToken();
+        var httpClient = new HttpClient();
+
+        await LoadDB(httpClient);
+
+
+        var deepSeekAi = new DeepSeek("", httpClient, _apiDeepSeekKey);
+        var tgBot = new TelegramBotClient(_apiTgKey, httpClient, cts);
+        var tgBotUpdateHandler = new TelegramBotHandler();
+
+        tgBot.StartReceiving(tgBotUpdateHandler, cancellationToken: cts);
+
+        Console.WriteLine($"{(await tgBot.GetMe()).Username} работает!\nНажмите любую кнопку для закрытия бота");
+        Console.ReadKey();
+    }
+
+    private static async Task LoadDB(HttpClient httpClient)
+    {
+        using MetroStationsDBContext db = new MetroStationsDBContext();
+
+        // проверяем загружена ли БД
+        if (db.Stations.Any())
+        {
+            return;
+        }
+
+        if (!File.Exists("metro.json"))
+        {
+            var jsonContent = await httpClient.GetStringAsync("https://api.hh.ru/metro/1");
+            await File.WriteAllTextAsync("metro.json", jsonContent);
+        }
+
+        var metroJson = JsonSerializer.Deserialize<MetroJson>(File.ReadAllText("metro.json"), new JsonSerializerOptions(JsonSerializerDefaults.Web)); // скачано с https://api.hh.ru/metro/1
+
+        var stations = new List<Station>();
+
+        (double lat, double lon) targetDest = (55.663146, 37.482852);//координаты югозападной
+
+        metroJson.Lines.ForEach(l => l.Stations.ForEach(s => stations.Add(s)));
+
+        db.Database.EnsureCreated();
+        foreach (var station in stations)
+        {
+            station.LineName = station.Line.Name;
+            station.LineHexColor = station.Line.HexColor;
+            var dist = Math.Sqrt(Math.Pow((station.Latitude - targetDest.lat) * 111.3, 2) + Math.Pow((station.Longitude - targetDest.lon) * 62.5, 2));
+            var transferMinutes = station.LineName == "Сокольническая" ? 0 : 5;
+
+            station.MinutesToYougoZapadnaya = Math.Max(1, (int)Math.Round(dist * 1.95 + transferMinutes));
+            db.Stations.Add(station);
+        }
+        db.SaveChanges();
+    }
+}
