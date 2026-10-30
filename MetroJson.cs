@@ -1,8 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Sqlite.Query.Internal;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Text;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
 namespace InlineTelegramBot;
@@ -32,7 +28,9 @@ public class Station
     [JsonPropertyName("lng")]
     public double Longitude { get; set; }
 
-    public int MinutesToYougoZapadnaya { get; set; }
+    public (double lat, double lon) Coords { get => (Latitude, Longitude); } 
+
+    public int MinutesToMirea { get; set; }
 
 }
 

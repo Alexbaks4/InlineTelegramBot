@@ -1,6 +1,5 @@
 ﻿using System.Text.Json;
 using Telegram.Bot;
-using Telegram.Bot.Polling;
 using Telegram.Bot.Types.Enums;
 
 namespace InlineTelegramBot;
@@ -9,6 +8,9 @@ internal class Program
 {
     private static readonly string _apiTgKey = "9187670724:AAHuQiM5hLYon_Gg1fcaCMI9yF3DOwsTRrE";
     private static readonly string _apiDeepSeekKey = "sk-0199ffeb887c4b729d38e38b7c7d6c0d";
+
+
+    private static readonly (double lat, double lon) _mireaLocation = (55.6683009, 37.4750282);
     private static readonly List<UpdateType> _updateTypes = new List<UpdateType>()
     {
         
@@ -24,7 +26,7 @@ internal class Program
 
         var deepSeekAi = new DeepSeek("", httpClient, _apiDeepSeekKey);
         var tgBot = new TelegramBotClient(_apiTgKey, httpClient, cts);
-        var tgBotUpdateHandler = new TelegramBotHandler();
+        var tgBotUpdateHandler = new TelegramBotHandler(_mireaLocation);
 
         tgBot.StartReceiving(tgBotUpdateHandler, cancellationToken: cts);
 
@@ -36,6 +38,8 @@ internal class Program
     {
         using MetroStationsDBContext db = new MetroStationsDBContext();
 
+        //db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
         // проверяем загружена ли БД
         if (db.Stations.Any())
         {
@@ -48,7 +52,7 @@ internal class Program
             await File.WriteAllTextAsync("metro.json", jsonContent);
         }
 
-        var metroJson = JsonSerializer.Deserialize<MetroJson>(File.ReadAllText("metro.json"), new JsonSerializerOptions(JsonSerializerDefaults.Web)); // скачано с https://api.hh.ru/metro/1
+        var metroJson = JsonSerializer.Deserialize<MetroJson>(File.ReadAllText("metro.json"), new JsonSerializerOptions(JsonSerializerDefaults.Web))!; // скачано с https://api.hh.ru/metro/1
 
         var stations = new List<Station>();
 
@@ -64,7 +68,7 @@ internal class Program
             var dist = Math.Sqrt(Math.Pow((station.Latitude - targetDest.lat) * 111.3, 2) + Math.Pow((station.Longitude - targetDest.lon) * 62.5, 2));
             var transferMinutes = station.LineName == "Сокольническая" ? 0 : 5;
 
-            station.MinutesToYougoZapadnaya = Math.Max(1, (int)Math.Round(dist * 1.95 + transferMinutes));
+            station.MinutesToMirea = Math.Max(1, (int)Math.Round(dist * 1.95 + transferMinutes + 9));
             db.Stations.Add(station);
         }
         db.SaveChanges();
