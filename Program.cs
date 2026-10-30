@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 
@@ -6,8 +7,8 @@ namespace InlineTelegramBot;
 
 internal class Program
 {
-    private static readonly string _apiTgKey = "9187670724:AAHuQiM5hLYon_Gg1fcaCMI9yF3DOwsTRrE";
-    private static readonly string _apiDeepSeekKey = "sk-0199ffeb887c4b729d38e38b7c7d6c0d";
+    private static string _tgApiKey;
+    //private static readonly string _apiDeepSeekKey;
 
 
     private static readonly (double lat, double lon) _mireaLocation = (55.6683009, 37.4750282);
@@ -18,14 +19,27 @@ internal class Program
 
     private async static Task Main(string[] args)
     {
+        if (!File.Exists("token.txt"))
+        {
+            File.Create("token.txt");
+        }
+        _tgApiKey = File.ReadAllText("token.txt");
+        if (string.IsNullOrEmpty(_tgApiKey))
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("Вставьте токен бота в token.txt");
+            Console.ReadKey();
+            return;
+        }
+
         var cts = new CancellationToken();
         var httpClient = new HttpClient();
 
         await LoadDB(httpClient);
 
 
-        var deepSeekAi = new DeepSeek("", httpClient, _apiDeepSeekKey);
-        var tgBot = new TelegramBotClient(_apiTgKey, httpClient, cts);
+        //var deepSeekAi = new DeepSeek("", httpClient, _apiDeepSeekKey);
+        var tgBot = new TelegramBotClient(_tgApiKey, httpClient, cts);
         var tgBotUpdateHandler = new TelegramBotHandler(_mireaLocation);
 
         tgBot.StartReceiving(tgBotUpdateHandler, cancellationToken: cts);
