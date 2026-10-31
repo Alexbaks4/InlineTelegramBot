@@ -7,7 +7,11 @@ namespace InlineTelegramBot;
 
 internal class Program
 {
-    private static string _tgApiKey;
+    private static string _tgApiKey = "";
+
+    private static TelegramBotClient _botClient;
+    private static TelegramBotHandler _botHandler;
+
     //private static readonly string _apiDeepSeekKey;
 
 
@@ -19,6 +23,23 @@ internal class Program
 
     private async static Task Main(string[] args)
     {
+        var ct = new CancellationToken();
+        var httpClient = new HttpClient();
+
+
+        InitTelegramBot(httpClient, ct);
+        await LoadDB(httpClient);
+
+
+        //var deepSeekAi = new DeepSeek("", httpClient, _apiDeepSeekKey);
+
+
+        Console.WriteLine($"{(await _botClient.GetMe()).Username} работает!\nНажмите любую кнопку для закрытия бота");
+        Console.ReadKey();
+    }
+
+    private static async void InitTelegramBot(HttpClient httpClient, CancellationToken ct)
+    {
         if (!File.Exists("token.txt"))
         {
             File.Create("token.txt");
@@ -27,25 +48,23 @@ internal class Program
         if (string.IsNullOrEmpty(_tgApiKey))
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Вставьте токен бота в token.txt");
-            Console.ReadKey();
-            return;
+            Console.WriteLine("Введите токен:");
+            _tgApiKey = Console.ReadLine();
+            File.AppendAllText("token.txt", _tgApiKey);
+        }
+        _botClient = new TelegramBotClient(token: _tgApiKey, httpClient: httpClient, cancellationToken: ct);
+        try
+        {
+            Console.WriteLine($"{(await _botClient.GetMe()).Username} работает!\nНажмите любую кнопку для закрытия бота");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Произошла ошибка {ex.Message}. Проверьте валидность токена в token.txt и доступ к серверам телеграмма с вашего IP");
+            Environment.Exit(ex.HResult);
         }
 
-        var cts = new CancellationToken();
-        var httpClient = new HttpClient();
-
-        await LoadDB(httpClient);
-
-
-        //var deepSeekAi = new DeepSeek("", httpClient, _apiDeepSeekKey);
-        var tgBot = new TelegramBotClient(_tgApiKey, httpClient, cts);
-        var tgBotUpdateHandler = new TelegramBotHandler(_mireaLocation);
-
-        tgBot.StartReceiving(tgBotUpdateHandler, cancellationToken: cts);
-
-        Console.WriteLine($"{(await tgBot.GetMe()).Username} работает!\nНажмите любую кнопку для закрытия бота");
-        Console.ReadKey();
+        _botHandler = new TelegramBotHandler(_mireaLocation);
+        _botClient.StartReceiving(_botHandler, cancellationToken: ct);
     }
 
     private static async Task LoadDB(HttpClient httpClient)

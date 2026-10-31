@@ -23,19 +23,51 @@ internal class TelegramBotHandler : IUpdateHandler
             case UpdateType.InlineQuery:
                 await HandleInlineQuery(botClient, update, ct);
                 break;
+            case UpdateType.ChosenInlineResult:
+                await HandleChoosenInlineResult(botClient, update, ct);
+                break;
             default:
                 break;
         }
     }
-
     private async Task HandleInlineQuery(ITelegramBotClient botClient, Update update, CancellationToken ct)
     {
-        if (update.InlineQuery!.Location is null)
+        var results = new List<InlineQueryResult>()
         {
+            new InlineQueryResultArticle(id: "0" + Guid.NewGuid().ToString(), title: "сколько ехать до шараги", inputMessageContent: new InputTextMessageContent() { MessageText = $"<i>Определяю сколько {update.InlineQuery.From.Username ?? "пользователю"} до шараги...</i>", ParseMode = ParseMode.Html })
+        };
+
+        await botClient.AnswerInlineQuery(
+            inlineQueryId: update.InlineQuery!.Id,
+            results: results,
+            cacheTime: 0,
+            isPersonal: true,
+            cancellationToken: ct);
+    }
+
+    private async Task HandleChoosenInlineResult(ITelegramBotClient botClient, Update update, CancellationToken ct)
+    {
+        switch (update.ChosenInlineResult!.ResultId[0])
+        {
+            case '0':
+                await SendTimeToMirea(botClient, update, ct);
+                break;
+        }
+    }
+
+    private async Task SendTimeToMirea(ITelegramBotClient botClient, Update update, CancellationToken ct)
+    {
+        if (update.ChosenInlineResult!.Location is null)
+        {
+            await botClient.EditMessageText(
+                inlineMessageId: update.ChosenInlineResult.InlineMessageId!,
+                text: "не удалось получить доступ к местоположению",
+                parseMode: ParseMode.Html,
+                cancellationToken: ct);
             return;
         }
 
-        (double lat, double lon) currenLoc = (update.InlineQuery.Location.Latitude, update.InlineQuery.Location.Longitude);
+        (double lat, double lon) currenLoc = (update.ChosenInlineResult.Location.Latitude, update.ChosenInlineResult.Location.Longitude);
 
         string message;
         if (GetSquaredDist(_mireaLocation, currenLoc) > 0.04)
@@ -68,18 +100,13 @@ internal class TelegramBotHandler : IUpdateHandler
         {
             message = $"Я в шараге";
         }
-        var results = new List<InlineQueryResult>()
-        {
-            new InlineQueryResultArticle(id: Guid.NewGuid().ToString(), title: "сколько ехать до шараги", inputMessageContent: new InputTextMessageContent() { MessageText = message, ParseMode = ParseMode.Html })
-        };
-
-        await botClient.AnswerInlineQuery(
-            inlineQueryId: update.InlineQuery.Id,
-            results: results,
-            cacheTime: 0,
-            isPersonal: true,
+        await botClient.EditMessageText(
+            inlineMessageId: update.ChosenInlineResult.InlineMessageId!,
+            text: message,
+            parseMode: ParseMode.Html,
             cancellationToken: ct);
     }
+
 
     private double GetDist((double lat, double lon) stationLoc, (double lat, double lon) currentLoc)
     {
