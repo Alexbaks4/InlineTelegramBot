@@ -3,6 +3,7 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InlineQueryResults;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace InlineTelegramBot;
 
@@ -26,15 +27,45 @@ internal class TelegramBotHandler : IUpdateHandler
             case UpdateType.ChosenInlineResult:
                 await HandleChoosenInlineResult(botClient, update, ct);
                 break;
+            case UpdateType.CallbackQuery:
+                await HandleCallbackQuery(botClient, update, ct);
+                break;
             default:
                 break;
         }
     }
+
+    private async Task HandleCallbackQuery(ITelegramBotClient botClient, Update update, CancellationToken ct)
+    {
+        if (update.CallbackQuery!.Data == "cancel")
+        {
+            await botClient.EditMessageText(update.CallbackQuery.InlineMessageId!, "Запрос был отменен пользователем");
+        }
+    }
+
     private async Task HandleInlineQuery(ITelegramBotClient botClient, Update update, CancellationToken ct)
     {
+        var cancelButton = InlineKeyboardButton.WithCallbackData("Отмена", "cancel");
+
         var results = new List<InlineQueryResult>()
         {
-            new InlineQueryResultArticle(id: "0" + Guid.NewGuid().ToString(), title: "сколько ехать до шараги", inputMessageContent: new InputTextMessageContent() { MessageText = $"<i>Определяю сколько {update.InlineQuery.From.Username ?? "пользователю"} до шараги...</i>", ParseMode = ParseMode.Html })
+            new InlineQueryResultArticle()
+            {
+                Id = "0" + Guid.NewGuid().ToString(),
+                Title = "Cколько ехать до шараги",
+                Description = "Узнай сколько ехать до мирэа",
+                
+                InputMessageContent =  new InputTextMessageContent()
+                {
+                    MessageText = $"<i>Определяю сколько {update.InlineQuery!.From.Username ?? "пользователю"} ехать до шараги...</i>",
+                    ParseMode = ParseMode.Html
+                },
+                ReplyMarkup = new InlineKeyboardMarkup(new[]
+                {
+                    cancelButton
+                }),
+                ThumbnailUrl = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQVoQ3tMqqHoD1DluKy85bOVZgYdJ7RJpSjNDLmoHVsZBtsrdNyFMMmLMHS&s=10"
+            }
         };
 
         await botClient.AnswerInlineQuery(
@@ -61,7 +92,7 @@ internal class TelegramBotHandler : IUpdateHandler
         {
             await botClient.EditMessageText(
                 inlineMessageId: update.ChosenInlineResult.InlineMessageId!,
-                text: "не удалось получить доступ к местоположению",
+                text: "Не удалось получить доступ к местоположению",
                 parseMode: ParseMode.Html,
                 cancellationToken: ct);
             return;
@@ -89,17 +120,18 @@ internal class TelegramBotHandler : IUpdateHandler
 
             if (distToStation > 2.5)
             {
-                message = $"Ближайшая станция <tg-spoiler>{currentStation.Name.ToLower()}</tg-spoiler> в <tg-spoiler>{Math.Round(distToStation, 0)}</tg-spoiler> км, оттуда до шараги <tg-spoiler>{currentStation.MinutesToMirea}</tg-spoiler> мин\nПоследнее обновление: {DateTime.Now:t}";
+                message = $"Ближайшая станция <tg-spoiler>{currentStation.Name.ToLower()}</tg-spoiler> в <tg-spoiler>{Math.Round(distToStation, 0)}</tg-spoiler> км, оттуда до шараги <tg-spoiler>{currentStation.MinutesToMirea}</tg-spoiler> мин";
             }
             else
             {
-                message = $"Я на <tg-spoiler>{currentStation.Name.ToLower()}</tg-spoiler>, до шараги <tg-spoiler>{currentStation.MinutesToMirea}</tg-spoiler> мин\nПоследнее обновление: {DateTime.Now:t}";
+                message = $"Я на <tg-spoiler>{currentStation.Name.ToLower()}</tg-spoiler>, до шараги <tg-spoiler>{currentStation.MinutesToMirea}</tg-spoiler> мин";
             }
         }
         else
         {
             message = $"Я в шараге";
         }
+
         await botClient.EditMessageText(
             inlineMessageId: update.ChosenInlineResult.InlineMessageId!,
             text: message,

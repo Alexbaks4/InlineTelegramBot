@@ -33,8 +33,6 @@ internal class Program
 
         //var deepSeekAi = new DeepSeek("", httpClient, _apiDeepSeekKey);
 
-
-        Console.WriteLine($"{(await _botClient.GetMe()).Username} работает!\nНажмите любую кнопку для закрытия бота");
         Console.ReadKey();
     }
 
@@ -49,10 +47,12 @@ internal class Program
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("Введите токен:");
+            Console.ResetColor();
             _tgApiKey = Console.ReadLine();
             File.AppendAllText("token.txt", _tgApiKey);
         }
         _botClient = new TelegramBotClient(token: _tgApiKey, httpClient: httpClient, cancellationToken: ct);
+        Console.Clear();
         try
         {
             Console.WriteLine($"{(await _botClient.GetMe()).Username} работает!\nНажмите любую кнопку для закрытия бота");
