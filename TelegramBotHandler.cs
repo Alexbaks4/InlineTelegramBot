@@ -115,7 +115,7 @@ internal class TelegramBotHandler : IUpdateHandler
 
         string message;
         // check distance to mirea
-        if (GetSquaredDist(_mireaLocation, currenLoc) > 0.04)
+        if (GetSquaredDist(_mireaLocation, currenLoc) > 0.36)
         {
             Station currentStation;
             double distToStation;
