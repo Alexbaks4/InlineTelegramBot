@@ -7,19 +7,44 @@ namespace InlineTelegramBot;
 
 internal class Program
 {
-    private static string _tgApiKey = "";
-
     private static TelegramBotClient _botClient;
     private static TelegramBotHandler _botHandler;
 
-    //private static readonly string _apiDeepSeekKey;
-
-
-    private static readonly (double lat, double lon) _mireaLocation = (55.6683009, 37.4750282);
-    private static readonly List<UpdateType> _updateTypes = new List<UpdateType>()
+    private static Dictionary<string, string> _lineEmojis = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        
+        { "Сокольническая", "🔴" },
+        { "Замоскворецкая", "🟢" },
+        { "Арбатско-Покровская", "🔵" },
+        { "Филёвская", "🩵" },
+        { "Кольцевая", "🟤" },
+        { "Калужско-Рижская", "🟠" },
+        { "Таганско-Краснопресненская", "🟣" },
+        { "Калининская", "🟡" },
+        { "Солнцевская", "🟡" },
+        { "Серпуховско-Тимирязевская", "🔘" },
+        { "Люблинско-Дмитровская", "🍏" },
+        { "Большая кольцевая", "💠" },
+        { "Каховская", "💠" },
+        { "Бутовская", "🔹" }, 
+        { "Московское центральное кольцо", "⭕" },
+        { "Некрасовская", "🩷" }, 
+        { "Троицкая", "🟩" }, 
+        { "МЦД-1", "🟧" }, 
+        { "МЦД-2", "🟪" },
+        { "МЦД-3", "🟨" },
+        { "МЦД-4", "🟩" }
     };
+
+    // coords (latitude, longitude) of mirea
+    private static readonly (double lat, double lon) _mireaLocation = (55.6683009, 37.4750282);
+
+    // what kind of updates bot should get
+    private static readonly UpdateType[] _updateTypes =
+    [
+        UpdateType.InlineQuery,
+        UpdateType.ChosenInlineResult,
+        UpdateType.CallbackQuery
+    ];
 
     private async static Task Main(string[] args)
     {
@@ -27,35 +52,38 @@ internal class Program
         var httpClient = new HttpClient();
 
 
-        InitTelegramBot(httpClient, ct);
+        await InitTelegramBot(httpClient, ct);
         await LoadDB(httpClient);
-
-
-        //var deepSeekAi = new DeepSeek("", httpClient, _apiDeepSeekKey);
 
         Console.ReadKey();
     }
 
+    /// <summary>
+    /// initialize telegram bot with the token from token.txt file
+    /// </summary>
+    /// <param name="httpClient">httpClient which will be used by bot to send requests</param>
+    /// <param name="ct">cancelation token</param>
+    /// <returns></returns>
     private static async Task InitTelegramBot(HttpClient httpClient, CancellationToken ct)
     {
         if (!File.Exists("token.txt"))
         {
             File.Create("token.txt");
         }
-        _tgApiKey = File.ReadAllText("token.txt");
-        if (string.IsNullOrEmpty(_tgApiKey))
+        var tgApiKey = File.ReadAllText("token.txt");
+        if (string.IsNullOrEmpty(tgApiKey))
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("Введите токен:");
             Console.ResetColor();
-            _tgApiKey = Console.ReadLine() ?? "";
-            File.AppendAllText("token.txt", _tgApiKey);
+            tgApiKey = Console.ReadLine() ?? "";
+            File.AppendAllText("token.txt", tgApiKey);
         }
-        _botClient = new TelegramBotClient(token: _tgApiKey, httpClient: httpClient, cancellationToken: ct);
+        _botClient = new TelegramBotClient(token: tgApiKey, httpClient: httpClient, cancellationToken: ct);
         Console.Clear();
         try
         {
-            Console.WriteLine($"{(await _botClient.GetMe()).Username} работает!\nНажмите любую кнопку для закрытия бота");
+            Console.WriteLine($"@{(await _botClient.GetMe(cancellationToken: ct)).Username} работает!\nНажмите любую кнопку для закрытия бота");
         }
         catch (Exception ex)
         {
@@ -64,16 +92,22 @@ internal class Program
         }
 
         _botHandler = new TelegramBotHandler(_mireaLocation);
-        _botClient.StartReceiving(_botHandler, cancellationToken: ct);
+        _botClient.StartReceiving(updateHandler: _botHandler, cancellationToken: ct, receiverOptions: new Telegram.Bot.Polling.ReceiverOptions() { AllowedUpdates = _updateTypes } );
     }
 
+    /// <summary>
+    /// loads database of metro stations from metro.json or https://api.hh.ru/metro/1
+    /// </summary>
+    /// <param name="httpClient">httpClient to send requst to https://api.hh.ru/metro/1</param>
+    /// <returns></returns>
     private static async Task LoadDB(HttpClient httpClient)
     {
         using MetroStationsDBContext db = new MetroStationsDBContext();
 
-        //db.Database.EnsureDeleted();
+        db.Database.EnsureDeleted();
         db.Database.EnsureCreated();
-        // проверяем загружена ли БД
+
+        // check if db was created
         if (db.Stations.Any())
         {
             return;
@@ -85,23 +119,21 @@ internal class Program
             await File.WriteAllTextAsync("metro.json", jsonContent);
         }
 
-        var metroJson = JsonSerializer.Deserialize<MetroJson>(File.ReadAllText("metro.json"), new JsonSerializerOptions(JsonSerializerDefaults.Web))!; // скачано с https://api.hh.ru/metro/1
+        var metroJson = JsonSerializer.Deserialize<MetroJson>(File.ReadAllText("metro.json"), new JsonSerializerOptions(JsonSerializerDefaults.Web))!; // downloaded from https://api.hh.ru/metro/1
 
-        var stations = new List<Station>();
+        var stations = metroJson.Lines.SelectMany(l => l.Stations);
 
-        (double lat, double lon) targetDest = (55.663146, 37.482852);//координаты югозападной
+        (double lat, double lon) targetDest = (55.663146, 37.482852);// coords of югозападной
 
-        metroJson.Lines.ForEach(l => l.Stations.ForEach(s => stations.Add(s)));
-
-        db.Database.EnsureCreated();
         foreach (var station in stations)
         {
             station.LineName = station.Line.Name;
-            station.LineHexColor = station.Line.HexColor;
-            var dist = Math.Sqrt(Math.Pow((station.Latitude - targetDest.lat) * 111.3, 2) + Math.Pow((station.Longitude - targetDest.lon) * 62.5, 2));
-            var transferMinutes = station.LineName == "Сокольническая" ? 0 : 5;
+            station.LineColorEmoji = _lineEmojis.GetValueOrDefault(station.LineName, "⚪");
 
-            station.MinutesToMirea = Math.Max(1, (int)Math.Round(dist * 1.95 + transferMinutes + 9));
+            var dist = Math.Sqrt(Math.Pow((station.Latitude - targetDest.lat) * 111.3, 2) + Math.Pow((station.Longitude - targetDest.lon) * 62.5, 2));
+            var transferMinutes = station.LineName == "Сокольническая" ? 0 : 5;// add ~5 minutes for the transfer
+
+            station.MinutesToMirea = Math.Max(1, (int)Math.Round(dist * 1.95 + transferMinutes + 9));// an approximate formula for calculating travel time. + 9-minute walk to MIREA from metro
             db.Stations.Add(station);
         }
         db.SaveChanges();

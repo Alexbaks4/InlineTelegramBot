@@ -9,14 +9,16 @@ namespace InlineTelegramBot;
 
 internal class TelegramBotHandler : IUpdateHandler
 {
+    // mirea coordinates
+    private (double lat, double lon) _mireaLocation;
 
-    private (double lat, double lon) _mireaLocation = (55.6683009, 37.4750282);
-
+    // constructor
     public TelegramBotHandler((double lat, double lon) mireaLocation)
     {
         _mireaLocation = mireaLocation;
     }
 
+    // main update router
     public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken ct)
     {
         switch (update.Type)
@@ -35,26 +37,32 @@ internal class TelegramBotHandler : IUpdateHandler
         }
     }
 
+    // handles inline keyboard clicks
     private async Task HandleCallbackQuery(ITelegramBotClient botClient, Update update, CancellationToken ct)
     {
+        // cancel button action
         if (update.CallbackQuery!.Data == "cancel")
         {
             await botClient.EditMessageText(update.CallbackQuery.InlineMessageId!, "Запрос был отменен пользователем");
         }
     }
 
+    // generates inline search results
     private async Task HandleInlineQuery(ITelegramBotClient botClient, Update update, CancellationToken ct)
     {
+        // inline cancel button setup
         var cancelButton = InlineKeyboardButton.WithCallbackData("Отмена", "cancel");
 
+        // inline result list
         var results = new List<InlineQueryResult>()
         {
             new InlineQueryResultArticle()
             {
+                // unique result id
                 Id = "0" + Guid.NewGuid().ToString(),
                 Title = "Cколько ехать до шараги",
                 Description = "Узнай сколько ехать до мирэа",
-                
+
                 InputMessageContent =  new InputTextMessageContent()
                 {
                     MessageText = $"<i>Определяю сколько {update.InlineQuery!.From.Username ?? "пользователю"} ехать до шараги...</i>",
@@ -68,6 +76,7 @@ internal class TelegramBotHandler : IUpdateHandler
             }
         };
 
+        // send inline response
         await botClient.AnswerInlineQuery(
             inlineQueryId: update.InlineQuery!.Id,
             results: results,
@@ -76,6 +85,7 @@ internal class TelegramBotHandler : IUpdateHandler
             cancellationToken: ct);
     }
 
+    // handles selected inline result
     private async Task HandleChoosenInlineResult(ITelegramBotClient botClient, Update update, CancellationToken ct)
     {
         switch (update.ChosenInlineResult!.ResultId[0])
@@ -86,8 +96,10 @@ internal class TelegramBotHandler : IUpdateHandler
         }
     }
 
+    // calculates and sends travel time
     private async Task SendTimeToMirea(ITelegramBotClient botClient, Update update, CancellationToken ct)
     {
+        // check location access
         if (update.ChosenInlineResult!.Location is null)
         {
             await botClient.EditMessageText(
@@ -98,33 +110,37 @@ internal class TelegramBotHandler : IUpdateHandler
             return;
         }
 
+        // current location tuple
         (double lat, double lon) currenLoc = (update.ChosenInlineResult.Location.Latitude, update.ChosenInlineResult.Location.Longitude);
 
         string message;
+        // check distance to mirea
         if (GetSquaredDist(_mireaLocation, currenLoc) > 0.04)
         {
             Station currentStation;
             double distToStation;
 
-
+            // database connection
             using (MetroStationsDBContext db = new MetroStationsDBContext())
             {
+                // empty database check
                 if (!db.Stations.Any())
                 {
                     return;
                 }
+                // find nearest station
                 currentStation = db.Stations.ToList().MinBy(s => GetSquaredDist(s.Coords, currenLoc))!;
                 distToStation = GetDist(currentStation.Coords, currenLoc);
             }
 
-
+            // check distance to metro
             if (distToStation > 2.5)
             {
-                message = $"Ближайшая станция <tg-spoiler>{currentStation.Name.ToLower()}</tg-spoiler> в <tg-spoiler>{Math.Round(distToStation, 0)}</tg-spoiler> км, оттуда до шараги <tg-spoiler>{currentStation.MinutesToMirea}</tg-spoiler> мин";
+                message = $"Ближайшая станция <tg-spoiler>{currentStation.Name.ToLower()}{currentStation.LineColorEmoji}</tg-spoiler> в <tg-spoiler>{Math.Round(distToStation, 0)}</tg-spoiler> км, оттуда до шараги <tg-spoiler>{currentStation.MinutesToMirea}</tg-spoiler> мин";
             }
             else
             {
-                message = $"Я на <tg-spoiler>{currentStation.Name.ToLower()}</tg-spoiler>, до шараги <tg-spoiler>{currentStation.MinutesToMirea}</tg-spoiler> мин";
+                message = $"Я на <tg-spoiler>{currentStation.Name.ToLower()}{currentStation.LineColorEmoji}</tg-spoiler>, до шараги <tg-spoiler>{currentStation.MinutesToMirea}</tg-spoiler> мин";
             }
         }
         else
@@ -132,6 +148,7 @@ internal class TelegramBotHandler : IUpdateHandler
             message = $"Я в шараге";
         }
 
+        // update message with final result
         await botClient.EditMessageText(
             inlineMessageId: update.ChosenInlineResult.InlineMessageId!,
             text: message,
@@ -139,17 +156,19 @@ internal class TelegramBotHandler : IUpdateHandler
             cancellationToken: ct);
     }
 
-
+    // calculate actual distance
     private double GetDist((double lat, double lon) stationLoc, (double lat, double lon) currentLoc)
     {
         return Math.Sqrt(GetSquaredDist(stationLoc, currentLoc));
     }
 
+    // calculate squared distance for optimization
     private double GetSquaredDist((double lat, double lon) stationLoc, (double lat, double lon) currentLoc)
     {
         return Math.Pow((currentLoc.lat - stationLoc.lat) * 111.3, 2) + Math.Pow((currentLoc.lon - stationLoc.lon) * 62.5, 2);
     }
 
+    // error handler
     public Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, HandleErrorSource source, CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
