@@ -36,7 +36,7 @@ internal class Program
         Console.ReadKey();
     }
 
-    private static async void InitTelegramBot(HttpClient httpClient, CancellationToken ct)
+    private static async Task InitTelegramBot(HttpClient httpClient, CancellationToken ct)
     {
         if (!File.Exists("token.txt"))
         {
@@ -48,7 +48,7 @@ internal class Program
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("Введите токен:");
             Console.ResetColor();
-            _tgApiKey = Console.ReadLine();
+            _tgApiKey = Console.ReadLine() ?? "";
             File.AppendAllText("token.txt", _tgApiKey);
         }
         _botClient = new TelegramBotClient(token: _tgApiKey, httpClient: httpClient, cancellationToken: ct);
